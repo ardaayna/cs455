@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
   
   /* Broadcast B to every one */
   MPI_Bcast(B,n_sq, MPI_DOUBLE,ROOT,MPI_COMM_WORLD);
-  /* Each process computes its own mat mult */
+  /* Each process computes its own mats mult */
   mat_mult(A, B, C, n, my_work);
 
   if (my_rank == ROOT) {
