@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
   my_prod = dot_product_cuda(my_rank,my_work,vec_A,vec_B);
 
   //  MPI_Gather(...)
-  MPI_Gather(my_prod,1,MPI_INT,lst_prods,1,MPI_INT,ROOT, MPI_COMM_WORLD);
+  MPI_Gather(&my_prod,1,MPI_INT,lst_prods,1,MPI_INT,ROOT, MPI_COMM_WORLD);
   prod_dev = sum(nprocs,lst_prods);
 
   gettimeofday(&timecheck, NULL);

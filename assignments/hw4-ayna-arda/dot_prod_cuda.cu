@@ -68,13 +68,46 @@ int dot_product_cpu(int rank, int n, int *x, int *y){
 
 // Accumulate using binary tree reduciton
 __global__ void dot_prod_tree_reduction( int *a, int *b, int *c,int my_work, int log_n){
-  
   // fill in
+  __shared__ int products[THREADS_PER_BLOCK];
+  int tid = threadIdx.x;
+  int index = blockIdx.x * blockDim.x + tid;
+
+  products[tid] = (index < my_work) ? a[index] * b[index] : 0;
+  __syncthreads();
+
+  for (int round = 0; round < log_n; round++){
+    int stride = blockDim.x >> (round + 1);
+
+    if (tid < stride){
+      products[tid] += products[tid + stride];
+    }
+  }
+
+  if (tid == 0){
+    c[blockIdx.x] = products[0]
+  }
+
 }
 
 // Thd 0 accumulates
 __global__ void dot_prod_serial( int *a, int *b, int *c, int n,int my_work, int log_n) {
   // fill in
+  __shared__ int products[THREADS_PER_BLOCK];
+
+  int tid = threadIdx.x;
+  int index = blockIdx.x * blockDim.x + tid;
+
+  products[tid] = (index < my_work) ? a[index] * b[index] : 0;
+  __syncthreads();
+
+  if (tid == 0){
+    int total = 0;
+    for (int i = 0; i < n; i++){
+      total += products[i];
+    }
+    c[blockIdx.x] = total;
+  }
 }
 
 /**
