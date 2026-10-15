@@ -1,0 +1,16 @@
+CS698 GPU Cluster Programming MPI+CUDA - Homework 4
+Homework 4 on Dot Product in MPI and Cuda
+
+Using the template files dot_product_mpi.cpp and dot_prod_cuda.cu and Makefile, write a dot product program in MPI and CUDA. The two files, dot_prod_mpi.cpp and dot_prod_cuda.cu are taken from the working version, except some functions are deleted for you to fill. The files compile but won't do much. You need to fill in the missing lines and functions as indicated in the files.
+
+The master randomly generates both vec A and vec B. Assuming the vector dimension is a multiple of the number of processes, both vectors will be will be mutually equally distributed to nprocs processes. As
+
+For each process, perform dot product on n/nprocs elements.
+
+The master collects individial prods from nprocs processes.
+
+Now on the master, sum individial prods to find the final dot product.
+
+Compare the parallel version with the serial version.
+
+They must match. Otherwise, all futile. You wasted a lot of electrons. Do it again until you match the two. 
