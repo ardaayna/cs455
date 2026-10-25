@@ -4,7 +4,10 @@
             "name": "Mac",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/opt/homebrew/include/**"
+                "/opt/homebrew/include/**",
+                "/usr/lib64/openmpi/include/**",
+                "/usr/include/**"
+
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc"
