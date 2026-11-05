@@ -4,9 +4,10 @@
             "name": "Mac",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/opt/homebrew/include/**",
                 "/usr/lib64/openmpi/include/**",
-                "/usr/include/**"
+                "/usr/include/openmpi-x86_64",
+                "/home/cronos/cuda-samples/Common",
+                "/usr/include/cuda_profiler_api.h",
 
             ],
             "defines": [],
