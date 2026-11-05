@@ -66,6 +66,16 @@ void conv_host(int* input, int* output, unsigned int height, unsigned int width)
     for(out_col=0; out_col<width; out_col++) {
       sum = 0;
       /* Fill in */
+      for(filter_row = 0; filter_row < FILTER_DIM; filter_row++){
+        for(filter_col = 0; filter_col < FILTER_DIM; filter_col++){
+          in_row = out_row + filter_row - FILTER_RADIUS;
+          in_col = out_col + filter_col - FILTER_RADIUS;
+
+          if(in_row >= 0 && in_row < height && in_col >= 0 && in_col < width ){
+            sum += input[in_row * width + in_col] * filter_host[filter_row * FILTER_DIM + filter_col];
+          }
+        }
+      }
       
 
       output[out_row*width + out_col] = sum;
@@ -133,7 +143,8 @@ int main(int argc, char *argv[]) {
       printf("INFO: filter_dim is set to DEFAULT_FILTER_DIM=%d\n",filter_dim);
     }
   }
-  printf("rank=%d: image: width=%d x height=%d, filter_dim: %d x %d)\n",width,height,filter_dim,filter_dim);
+  /*CHANGE: Missing my_rank as input.*/
+  printf("rank=%d: image: width=%d x height=%d, filter_dim: %d x %d)\n",my_rank, width,height,filter_dim,filter_dim);
 
   in_size = width * height;
   out_size = in_size;
@@ -142,8 +153,9 @@ int main(int argc, char *argv[]) {
   my_work = height / nprocs;
 
   printf("rank=%d: nprocs=%d width=%d my_work=%d/%d=%d\n",my_rank,nprocs,width,height,nprocs,my_work);
-
-  init_image(1,in_image, in_size);   /* with random ints: 0..15 */
+  if (my_rank == ROOT)
+    //Changed to 2 for random generation
+    init_image(2,in_image, in_size);   /* with random ints: 0..15 */
   init_image(0,out_image, out_size); /* zeros */
   init_filter_host(filter_host);
 
@@ -152,11 +164,13 @@ int main(int argc, char *argv[]) {
 
   /* MPI_Bcast in_image */
   /* ... */
+  MPI_Bcast(in_image, in_size, MPI_INT, ROOT, world);
 
   conv_dev(nprocs, my_rank, my_work, in_image,out_image, height, width, filter_dim,filter_host);
 
   /* MPI_Gather out_image */
   /* ... */
+  MPI_Gather(my_rank == ROOT ? MPI_IN_PLACE : out_image, my_work * width, MPI_INT, out_image, my_work * width, MPI_INT, ROOT, world);
 
   gettimeofday(&timecheck, NULL);
   mpi_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -165,7 +179,8 @@ int main(int argc, char *argv[]) {
   if (my_rank == 0) {
     gettimeofday(&timecheck, NULL);
     host_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec/ 1000;
-    conv_host(in_image,out_image_host, width, height);
+    /* CHANGE: The function expects the height first.*/
+    conv_host(in_image,out_image_host, height, width);
 
     gettimeofday(&timecheck, NULL);
     host_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec/ 1000;

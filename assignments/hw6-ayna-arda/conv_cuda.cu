@@ -49,7 +49,17 @@ void conv_host_cpu(int my_rank, int my_work, int* input, int* output, unsigned i
   for(out_row=start_row; out_row<end_row; out_row++) { /* start at offset */
     for(out_col=0; out_col<width; out_col++) {
       sum = 0;
-      /* Fill in */
+      for (filter_row=0; filter_row<FILTER_DIM; filter_row++) {
+        for (filter_col=0; filter_col<FILTER_DIM; filter_col++) {
+          in_row = out_row + filter_row - FILTER_RADIUS;
+          in_col = out_col + filter_col - FILTER_RADIUS;
+          if (in_row >= 0 && in_row < static_cast<int>(height) &&
+              in_col >= 0 && in_col < static_cast<int>(width)) {
+            sum += input[in_row*width + in_col] *
+                   filter_cpu[filter_row*FILTER_DIM + filter_col];
+          }
+        }
+      }
       output[cnt++] = sum;
     }
   }
@@ -83,8 +93,19 @@ __global__ void conv_dev_cuda(int my_rank,int my_work, int height,int width, int
   int out_row = blockIdx.y * blockDim.y + threadIdx.y + my_rank*my_work;
   int out_col = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if(out_row < height && out_col < width) {
-    /* Fill in */
+  if(out_row < height && out_row < (my_rank+1)*my_work && out_col < width) {
+    for (filter_row=0; filter_row<FILTER_DIM; filter_row++) {
+      for (filter_col=0; filter_col<FILTER_DIM; filter_col++) {
+        in_row = out_row + filter_row - FILTER_RADIUS;
+        in_col = out_col + filter_col - FILTER_RADIUS;
+        if (in_row >= 0 && in_row < height && in_col >= 0 && in_col < width) {
+          sum += input[in_row*width + in_col] *
+                 filter_dev[filter_row*FILTER_DIM + filter_col];
+        }
+      }
+    }
+    int local_row = out_row - my_rank*my_work;
+    output[local_row*width + out_col] = sum;
   }
 }
 
@@ -147,7 +168,7 @@ int conv_dev(int nprocs, int my_rank, int my_work, int *h_in_image,int *h_out_im
   checkCudaErrors(cudaEventRecord(start, stream));
 
   /* copy filter_cpu to filter_dev */
-  /* ... */
+  cudaMemcpyToSymbolAsync(filter_dev, filter_cpu, filter_size_bytes, 0, cudaMemcpyHostToDevice, stream);
 
   unsigned int in_bytes = sizeof(int) * in_size;
   unsigned int out_bytes = sizeof(int) * out_size;
@@ -162,29 +183,26 @@ int conv_dev(int nprocs, int my_rank, int my_work, int *h_in_image,int *h_out_im
   gettimeofday(&timecheck, NULL);
   dev_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec/ 1000;
 
-  int *out_image_on_cpu = (int *) malloc(out_bytes);
-
   cudaMalloc(reinterpret_cast<void **>(&d_in_image), in_bytes);
   cudaMalloc(reinterpret_cast<void **>(&d_out_image), out_bytes);
 
   // copy host memory to device
-  /* Fill in */
+  cudaMemcpyAsync(d_in_image, h_in_image, in_bytes, cudaMemcpyHostToDevice, stream);
 
   bx_dim = by_dim = 4;
-  gx_dim = (width)/bx_dim;
-  gy_dim = (my_work)/by_dim;
+  /*CHANGE: Round up in case there is a remainder.*/
+  gx_dim = (width + bx_dim - 1)/bx_dim;
+  gy_dim = (my_work + by_dim - 1)/by_dim;
   
   dim3 grid(gx_dim,gy_dim);
   dim3 threads(bx_dim,by_dim);	/* by_dim,bx_dim gy_dim,gx_dim */
   printf("rank=%d: CUDA kernel launch: grid(%d,%d), block(%d,%d)\n", my_rank, gx_dim, gy_dim, bx_dim,by_dim);
 
   /* Call cuda function */
-
-  int offset = my_rank*my_work*width;
-  int *d_src = d_out_image + offset;
+  conv_dev_cuda<<<grid, threads, 0, stream>>>(my_rank, my_work, height, width, d_in_image, d_out_image);
 
   // copy to the base address
-  /* Fill in */
+  cudaMemcpyAsync(h_out_image, d_out_image, my_work_bytes, cudaMemcpyDeviceToHost, stream);
 
   checkCudaErrors(cudaEventRecord(stop, stream));
   checkCudaErrors(cudaEventSynchronize(stop));
@@ -202,7 +220,8 @@ int conv_dev(int nprocs, int my_rank, int my_work, int *h_in_image,int *h_out_im
   fflush(stdout);
 
   // Compute on the cpu
-  /* Fill in */
+  conv_host_cpu(my_rank, my_work, h_in_image, h_out_image_cpu,
+                height, width, filter_cpu);
 
   if (compare_cpu(my_rank,my_work,h_out_image_cpu,h_out_image,height,width)) /* h_C is from dev */
     printf("\nCPU %d: Test: PASS: host == dev\n\n", my_rank);
@@ -210,5 +229,11 @@ int conv_dev(int nprocs, int my_rank, int my_work, int *h_in_image,int *h_out_im
     printf("\nCPU %d: Test: FAIL: host != dev\n\n", my_rank);
 
   fflush(stdout);
+  cudaFree(d_in_image);
+  cudaFree(d_out_image);
+  free(h_out_image_cpu);
+  checkCudaErrors(cudaEventDestroy(start));
+  checkCudaErrors(cudaEventDestroy(stop));
+  checkCudaErrors(cudaStreamDestroy(stream));
   return 0;
 }
